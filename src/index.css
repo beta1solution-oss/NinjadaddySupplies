@@ -1,0 +1,175 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Shadcn tokens - light mode for public site */
+    --background: 40 17% 95%;
+    --foreground: 0 0% 7%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 7%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 7%;
+    --primary: 50 100% 45%;
+    --primary-foreground: 0 0% 5%;
+    --secondary: 40 10% 93%;
+    --secondary-foreground: 0 0% 15%;
+    --muted: 40 10% 93%;
+    --muted-foreground: 0 0% 40%;
+    --accent: 50 100% 45%;
+    --accent-foreground: 0 0% 5%;
+    --destructive: 0 62.8% 50%;
+    --destructive-foreground: 0 0% 96%;
+    --border: 40 10% 87%;
+    --input: 40 10% 90%;
+    --ring: 50 100% 45%;
+    --radius: 0.75rem;
+
+    /* Sidebar tokens (admin - dark) */
+    --sidebar-background: 0 0% 10%;
+    --sidebar-foreground: 0 0% 96%;
+    --sidebar-primary: 50 100% 45%;
+    --sidebar-primary-foreground: 0 0% 5%;
+    --sidebar-accent: 0 0% 13%;
+    --sidebar-accent-foreground: 0 0% 96%;
+    --sidebar-border: 0 0% 18%;
+    --sidebar-ring: 50 100% 45%;
+
+    /* Public site brand tokens */
+    --brand-bg: #F5F5F2;
+    --brand-surface: #FFFFFF;
+    --brand-surface2: #F0F0ED;
+    --brand-text: #111111;
+    --brand-subtext: #555555;
+    --brand-yellow: #E6C200;
+    --brand-yellow-dark: #B8A000;
+    --brand-border: #E0E0DC;
+
+    /* Admin brand tokens */
+    --brand-dark: #1A1A1A;
+    --brand-admin-surface: #222222;
+    --brand-admin-surface2: #2A2A2A;
+    --brand-off-white: #F5F5F7;
+    --brand-muted: #888888;
+    --brand-dark-border: #333333;
+  }
+
+  /* Admin pages use dark theme - class applied on admin wrapper */
+  .admin-theme {
+    --background: 0 0% 10%;
+    --foreground: 0 0% 96%;
+    --card: 0 0% 13%;
+    --card-foreground: 0 0% 96%;
+    --border: 0 0% 20%;
+    --input: 0 0% 16%;
+    --muted: 0 0% 16%;
+    --muted-foreground: 0 0% 53%;
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+
+  /* Public body: off-white */
+  body {
+    font-family: 'Inter', sans-serif;
+    background-color: #F5F5F2;
+    color: #111111;
+    font-weight: 500;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Inter', sans-serif;
+    font-weight: 800;
+    color: #111111;
+    letter-spacing: -0.02em;
+  }
+}
+
+/* =========================================
+   PUBLIC SITE UTILITIES (off-white theme)
+   ========================================= */
+@layer utilities {
+  .pub-bg { background-color: #F5F5F2; }
+  .pub-surface { background-color: #FFFFFF; }
+  .pub-surface2 { background-color: #F0F0ED; }
+  .pub-text { color: #111111; }
+  .pub-subtext { color: #555555; }
+  .pub-border { border-color: #E0E0DC; }
+  .pub-yellow { color: #E6C200; }
+  .pub-yellow-bg { background-color: #E6C200; }
+  .pub-yellow-light { background-color: #FFF9E0; }
+
+  /* Admin dark utilities (preserved) */
+  .brand-dark { background-color: #1A1A1A; }
+  .brand-surface { background-color: #222222; }
+  .brand-surface2 { background-color: #2A2A2A; }
+  .brand-off-white { color: #F5F5F7; }
+  .brand-muted-color { color: #888888; }
+  .brand-yellow { color: #FFCC00; }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+
+  .fade-in-up { animation: fade-in-up 0.4s ease-out; }
+  .slide-in-right { animation: slide-in-right 0.3s ease-out; }
+}
+
+/* =========================================
+   ADMIN THEME OVERRIDES
+   ========================================= */
+.admin-wrapper {
+  background-color: #1A1A1A;
+  color: #F5F5F7;
+  min-height: 100vh;
+}
+.admin-wrapper h1,
+.admin-wrapper h2,
+.admin-wrapper h3,
+.admin-wrapper h4 {
+  color: #F5F5F7;
+}
+
+/* Admin status badges */
+.status-pending { background: rgba(255,165,0,0.15); color: #FFA500; border: 1px solid rgba(255,165,0,0.3); }
+.status-paid { background: rgba(0,200,100,0.15); color: #00C864; border: 1px solid rgba(0,200,100,0.3); }
+.status-dispatched { background: rgba(0,150,255,0.15); color: #0096FF; border: 1px solid rgba(0,150,255,0.3); }
+
+/* Admin nav active */
+.admin-nav-active {
+  background: rgba(255,200,0,0.12);
+  border-left: 3px solid #FFCC00;
+  color: #FFCC00 !important;
+}
+
+/* Animations */
+@keyframes fade-in-up {
+  from { transform: translateY(16px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+@keyframes slide-in-right {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes pulse-wa {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(37,211,102,0.5); }
+  50% { box-shadow: 0 0 0 10px rgba(37,211,102,0); }
+}
+.pulse-wa { animation: pulse-wa 2.5s infinite; }
+
+/* Public scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: #F0F0ED; }
+::-webkit-scrollbar-thumb { background: #CCCCCC; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #E6C200; }
+
+/* Star rating */
+.star-filled { color: #E6C200; }
+.star-empty { color: #CCCCCC; }
