@@ -14,7 +14,7 @@ const SocialTikTok = () => (
 const SocialInstagram = () => (
   <svg viewBox="0 0 24 24" className="w-5 h-5">
     <defs>
-      <linearGradient id="ig-grad2" x1="0%" y1="100%" x2="100%" y2="0%">
+      <linearGradient id="ig-grad3" x1="0%" y1="100%" x2="100%" y2="0%">
         <stop offset="0%" stopColor="#FFDC80"/>
         <stop offset="25%" stopColor="#FCAF45"/>
         <stop offset="50%" stopColor="#F77737"/>
@@ -22,7 +22,7 @@ const SocialInstagram = () => (
         <stop offset="100%" stopColor="#833AB4"/>
       </linearGradient>
     </defs>
-    <rect width="24" height="24" rx="6" fill="url(#ig-grad2)"/>
+    <rect width="24" height="24" rx="6" fill="url(#ig-grad3)"/>
     <circle cx="12" cy="12" r="4.5" fill="none" stroke="white" strokeWidth="1.8"/>
     <circle cx="17.5" cy="6.5" r="1.2" fill="white"/>
   </svg>
@@ -61,7 +61,6 @@ const socialLabels: Record<string, string> = {
   social_shopify: 'Shopify',
 };
 
-// Payment method icons
 const CryptoIcon = () => (
   <svg viewBox="0 0 32 32" className="w-6 h-5" fill="none">
     <circle cx="16" cy="16" r="16" fill="#F7931A"/>
@@ -69,11 +68,16 @@ const CryptoIcon = () => (
   </svg>
 );
 
-const WiseIcon = () => (
-  <svg viewBox="0 0 60 24" className="w-10 h-5" fill="none">
-    <text x="0" y="18" fontFamily="Arial" fontSize="18" fontWeight="bold" fill="#9FE870">W</text>
-    <text x="14" y="18" fontFamily="Arial" fontSize="14" fontWeight="600" fill="#2A2A2A">ise</text>
-  </svg>
+const GeegpayIcon = () => (
+  <div className="w-6 h-5 flex items-center justify-center">
+    <span className="text-sm font-900 text-emerald-500">G</span>
+  </div>
+);
+
+const PayoneerIcon = () => (
+  <div className="w-6 h-5 flex items-center justify-center">
+    <span className="text-xs font-900 text-orange-500">P</span>
+  </div>
 );
 
 const BankIcon = () => (
@@ -145,37 +149,22 @@ export default function Footer() {
           {/* Payment Methods */}
           <div>
             <h4 className="font-800 text-white mb-4 text-sm uppercase tracking-widest">We Accept</h4>
-            <div className="space-y-3">
-              <div className="flex items-center gap-3 p-2.5 bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl">
-                <CryptoIcon />
-                <div>
-                  <p className="text-xs font-700 text-white">Cryptocurrency</p>
-                  <p className="text-xs text-[#777777] font-500">BTC, ETH, USDT & more</p>
+            <div className="space-y-2.5">
+              {[
+                { icon: <CryptoIcon />, label: 'Cryptocurrency', sub: 'USDT, USDC & more' },
+                { icon: <GeegpayIcon />, label: 'Geegpay', sub: 'Fast African transfers' },
+                { icon: <PayoneerIcon />, label: 'Payoneer', sub: 'International transfers' },
+                { icon: <BankIcon />, label: 'Direct Bank', sub: 'US & UK bank accounts' },
+                { icon: <GiftCardIcon />, label: 'Gift Card', sub: 'Amazon, Apple + 5% off' },
+              ].map(({ icon, label, sub }) => (
+                <div key={label} className="flex items-center gap-3 p-2.5 bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl">
+                  {icon}
+                  <div>
+                    <p className="text-xs font-700 text-white">{label}</p>
+                    <p className="text-xs text-[#777777] font-500">{sub}</p>
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-3 p-2.5 bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl">
-                <div className="w-6 h-5 flex items-center justify-center">
-                  <span className="text-[#9FE870] font-900 text-lg leading-none">W</span>
-                </div>
-                <div>
-                  <p className="text-xs font-700 text-white">Wise Transfer</p>
-                  <p className="text-xs text-[#777777] font-500">Fast international transfer</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3 p-2.5 bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl">
-                <BankIcon />
-                <div>
-                  <p className="text-xs font-700 text-white">Direct Bank</p>
-                  <p className="text-xs text-[#777777] font-500">US & UK bank accounts</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3 p-2.5 bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl">
-                <GiftCardIcon />
-                <div>
-                  <p className="text-xs font-700 text-white">Gift Card</p>
-                  <p className="text-xs text-[#777777] font-500">Amazon, Apple & store cards</p>
-                </div>
-              </div>
+              ))}
             </div>
           </div>
 
@@ -201,6 +190,18 @@ export default function Footer() {
               <p className="text-xs text-[#777777] leading-relaxed font-500">
                 No PayPal. No Stripe. No card processors. 100% private, secure, peer-to-peer payments only.
               </p>
+            </div>
+
+            {/* Discount badges */}
+            <div className="mt-4 space-y-2">
+              <div className="flex items-center gap-2 p-2 bg-green-900/20 border border-green-700/30 rounded-lg">
+                <span className="text-green-400 text-xs">🎁</span>
+                <p className="text-xs text-green-400 font-700">Gift Card = Extra 5% Off</p>
+              </div>
+              <div className="flex items-center gap-2 p-2 bg-blue-900/20 border border-blue-700/30 rounded-lg">
+                <span className="text-blue-400 text-xs">×2</span>
+                <p className="text-xs text-blue-400 font-700">Buy 2+ Same Item = 10% Off</p>
+              </div>
             </div>
           </div>
         </div>

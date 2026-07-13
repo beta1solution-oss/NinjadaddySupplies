@@ -28,7 +28,8 @@ const SOCIAL_KEYS = [
 const PAYMENT_KEYS = [
   { key: 'crypto_wallet', label: 'Crypto Wallet Address (USDT/USDC)', placeholder: '0x...' },
   { key: 'crypto_network', label: 'Accepted Networks', placeholder: 'Polygon / BSC' },
-  { key: 'wise_email', label: 'Wise Transfer Email', placeholder: 'yourname@wise.com' },
+  { key: 'geegpay_info', label: 'Geegpay Account Details (shown to customer)', placeholder: 'e.g. Geegpay Tag: @ninjadaddy or account number' },
+  { key: 'payoneer_email', label: 'Payoneer Email / Account', placeholder: 'yourname@payoneer.com' },
   { key: 'whatsapp_number', label: 'WhatsApp Support Number', placeholder: '+2348101147123' },
   { key: 'whatsapp_greeting', label: 'WhatsApp Pre-filled Greeting', placeholder: 'Hello! I have a question...' },
   { key: 'us_shipping_fee', label: 'US Shipping Fee ($)', placeholder: '5.99' },

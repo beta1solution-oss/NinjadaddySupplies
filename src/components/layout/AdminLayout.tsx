@@ -2,9 +2,10 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import {
   LayoutDashboard, Package, ShoppingBag, Tag, Settings,
-  Gift, LogOut, Menu, Bell, Download, Percent
+  Gift, LogOut, Menu, Bell, Download, Percent, MessageSquare
 } from 'lucide-react';
 import { useAdmin } from '@/hooks/useAdmin';
+import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 
 interface AdminLayoutProps { children: React.ReactNode; }
@@ -16,6 +17,7 @@ const navItems = [
   { to: '/admin/categories', icon: Tag, label: 'Categories' },
   { to: '/admin/discounts', icon: Percent, label: 'Discounts' },
   { to: '/admin/gift-cards', icon: Gift, label: 'Gift Cards' },
+  { to: '/admin/messages', icon: MessageSquare, label: 'Messages' },
   { to: '/admin/settings', icon: Settings, label: 'Settings' },
 ];
 
@@ -30,6 +32,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [canInstall, setCanInstall] = useState(false);
+  const [unreadMessages, setUnreadMessages] = useState(0);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -39,6 +42,20 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     };
     window.addEventListener('beforeinstallprompt', handler);
     return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  // Poll for unread messages badge
+  useEffect(() => {
+    const fetchUnread = async () => {
+      const { count } = await supabase
+        .from('messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('is_read', false);
+      setUnreadMessages(count || 0);
+    };
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 15000);
+    return () => clearInterval(interval);
   }, []);
 
   const handleInstall = async () => {
@@ -88,7 +105,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             to={to}
             onClick={() => setSidebarOpen(false)}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-600 transition-all ${
+              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-600 transition-all relative ${
                 isActive
                   ? 'bg-[#FFCC00]/10 text-[#FFCC00] border-l-[3px] border-[#FFCC00] pl-[9px]'
                   : 'text-[#888888] hover:text-[#F5F5F7] hover:bg-[#2A2A2A]'
@@ -97,6 +114,12 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           >
             <Icon className="w-4 h-4 flex-shrink-0" />
             {label}
+            {/* Unread badge on Messages */}
+            {to === '/admin/messages' && unreadMessages > 0 && (
+              <span className="ml-auto w-5 h-5 bg-[#FFCC00] text-black text-xs font-900 rounded-full flex items-center justify-center leading-none">
+                {unreadMessages > 9 ? '9+' : unreadMessages}
+              </span>
+            )}
           </NavLink>
         ))}
       </nav>

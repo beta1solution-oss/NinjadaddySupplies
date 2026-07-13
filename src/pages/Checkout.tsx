@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Copy, Check, ArrowRight, ShoppingBag, CreditCard, Repeat, Landmark, Gift, Zap, Wind, Tag, X as XIcon } from 'lucide-react';
+import { Copy, Check, ArrowRight, ShoppingBag, CreditCard, Landmark, Gift, Zap, Wind, Tag, X as XIcon, MessageSquare, Send } from 'lucide-react';
 import Navbar from '@/components/layout/Navbar';
 import CartDrawer from '@/components/features/CartDrawer';
 import WhatsAppBubble from '@/components/features/WhatsAppBubble';
@@ -20,7 +20,7 @@ declare global {
 }
 
 type Country = 'United States' | 'United Kingdom';
-type PayMethod = 'crypto' | 'wise' | 'bank' | 'giftcard';
+type PayMethod = 'crypto' | 'geegpay' | 'payoneer' | 'bank' | 'giftcard';
 type DeliveryType = 'delivery' | 'pickup';
 
 const GIFT_CARD_TYPES = [
@@ -28,17 +28,16 @@ const GIFT_CARD_TYPES = [
   { id: 'google_play', name: 'Google Play', emoji: '🎮' },
   { id: 'apple', name: 'Apple', emoji: '🍎' },
   { id: 'steam', name: 'Steam', emoji: '🎯' },
-  { id: 'paypal', name: 'PayPal', emoji: '💳' },
-  { id: 'visa_gift', name: 'Visa Gift', emoji: '💰' },
   { id: 'ebay', name: 'eBay', emoji: '🛒' },
   { id: 'walmart', name: 'Walmart', emoji: '🏪' },
+  { id: 'target', name: 'Target', emoji: '🎯' },
+  { id: 'nike', name: 'Nike', emoji: '👟' },
 ];
 
 interface AddonProduct {
   id: string;
   name: string;
   persona: string;
-  angle: string;
   price: number;
   discountedPrice: number;
   icon: React.ReactNode;
@@ -49,7 +48,6 @@ const ADDON_PRODUCTS: AddonProduct[] = [
     id: 'neck_fan',
     name: 'Hands-Free Neck Fan',
     persona: 'Daily commuting, gym, outdoor walking',
-    angle: 'Stay cool hands-free anywhere you go',
     price: 34.99,
     discountedPrice: 24.49,
     icon: <Wind className="w-5 h-5" />,
@@ -57,8 +55,7 @@ const ADDON_PRODUCTS: AddonProduct[] = [
   {
     id: 'waist_fan',
     name: 'Heavy-Duty Waist Fan',
-    persona: 'Construction, delivery drivers, warehouse staff',
-    angle: 'Industrial-grade cooling for hard workers',
+    persona: 'Construction, delivery, warehouse staff',
     price: 44.99,
     discountedPrice: 31.49,
     icon: <Zap className="w-5 h-5" />,
@@ -67,7 +64,6 @@ const ADDON_PRODUCTS: AddonProduct[] = [
     id: 'desk_fan',
     name: 'Wall/Desk Suction Fan',
     persona: 'Office workers, kitchen, bedside cooling',
-    angle: 'Stick it anywhere, cool any space',
     price: 29.99,
     discountedPrice: 20.99,
     icon: <Wind className="w-5 h-5" />,
@@ -79,6 +75,12 @@ interface PromoDiscount {
   fixed_off: number | null;
   code: string;
 }
+
+// ── Gift card 5% auto-discount helpers ────────────────────────────
+const GIFTCARD_DISCOUNT_PCT = 5;
+// ── Bulk 2+ same product 10% discount ─────────────────────────────
+const BULK_QTY_THRESHOLD = 2;
+const BULK_DISCOUNT_PCT = 10;
 
 export default function Checkout() {
   const { items, subtotal, clearCart } = useCart();
@@ -95,6 +97,12 @@ export default function Checkout() {
   const [loading, setLoading] = useState(false);
   const [selectedAddons, setSelectedAddons] = useState<string[]>([]);
 
+  // One-time proof message (shown after gift card / crypto checkout)
+  const [completedOrderId, setCompletedOrderId] = useState<string | null>(null);
+  const [proofMessage, setProofMessage] = useState('');
+  const [messageSent, setMessageSent] = useState(false);
+  const [sendingMsg, setSendingMsg] = useState(false);
+
   // Promo code state
   const [promoCode, setPromoCode] = useState('');
   const [promoStatus, setPromoStatus] = useState<'idle' | 'checking' | 'valid' | 'invalid'>('idle');
@@ -107,21 +115,32 @@ export default function Checkout() {
     reference: '', notes: ''
   });
 
+  // ── Bulk discount: any item with qty >= 2 of same product ─────────
+  const hasBulkItem = items.some(item => item.quantity >= BULK_QTY_THRESHOLD);
+  const bulkSavings = hasBulkItem ? subtotal * (BULK_DISCOUNT_PCT / 100) : 0;
+
   const usFee = parseFloat(settings['us_shipping_fee'] || '5.99');
   const ukFee = parseFloat(settings['uk_shipping_fee'] || '7.99');
   const shippingFee = country === 'United States' ? usFee : ukFee;
   const addonTotal = ADDON_PRODUCTS.filter(a => selectedAddons.includes(a.id)).reduce((s, a) => s + a.discountedPrice, 0);
-  const baseTotal = subtotal + shippingFee + addonTotal;
 
-  // Apply promo discount
+  // Base after bulk discount
+  const afterBulk = subtotal - bulkSavings + shippingFee + addonTotal;
+
+  // Promo code discount
   const promoSavings = promoDiscount
-    ? (promoDiscount.percent_off ? baseTotal * (promoDiscount.percent_off / 100) : 0)
+    ? (promoDiscount.percent_off ? afterBulk * (promoDiscount.percent_off / 100) : 0)
       + (promoDiscount.fixed_off ? promoDiscount.fixed_off : 0)
     : 0;
-  const total = Math.max(0, baseTotal - promoSavings);
+  const afterPromo = Math.max(0, afterBulk - promoSavings);
+
+  // Gift card 5% auto-discount
+  const giftCardSavings = payMethod === 'giftcard' ? afterPromo * (GIFTCARD_DISCOUNT_PCT / 100) : 0;
+  const total = Math.max(0, afterPromo - giftCardSavings);
 
   const cryptoWallet = settings['crypto_wallet'] || '';
-  const wiseEmail = settings['wise_email'] || '';
+  const geegpayInfo = settings['geegpay_info'] || 'Contact admin for Geegpay details';
+  const payoneerEmail = settings['payoneer_email'] || '';
   const bankAccounts: BankAccount[] = (() => {
     try { return JSON.parse(settings['bank_accounts'] || '[]'); } catch { return []; }
   })();
@@ -210,25 +229,47 @@ export default function Checkout() {
     }
   };
 
+  const handleSendProof = async () => {
+    if (!proofMessage.trim() || !completedOrderId) return;
+    setSendingMsg(true);
+    const { error } = await supabase.from('messages').insert({
+      order_id: completedOrderId,
+      customer_name: form.name || 'Customer',
+      customer_email: form.email || null,
+      message: proofMessage.trim(),
+    });
+    if (!error) {
+      setMessageSent(true);
+      toast.success('Message sent to admin!');
+      setTimeout(() => {
+        navigate(`/order-confirmation/${completedOrderId}`);
+      }, 1500);
+    } else {
+      toast.error('Failed to send message. Please try WhatsApp instead.');
+    }
+    setSendingMsg(false);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name || !form.phone || !form.address || !form.city || !form.state || !form.zip) {
       toast.error('Please fill all required shipping fields.');
       return;
     }
-    if (!form.reference && payMethod !== 'giftcard') {
+    if (payMethod !== 'giftcard' && !form.reference) {
       toast.error('Payment reference is required.');
       return;
     }
-    if (payMethod === 'giftcard' && !giftCode) {
-      toast.error('Please enter your gift card code.');
-      return;
+    if (payMethod === 'giftcard') {
+      if (!giftCode) { toast.error('Please enter your gift card code.'); return; }
+      if (!selectedGiftType) { toast.error('Please select the gift card type.'); return; }
     }
 
     const payRef = payMethod === 'giftcard' ? giftCode : form.reference;
     const payMethodLabel = {
       crypto: 'Crypto (USDT/USDC)',
-      wise: 'Wise Transfer',
+      geegpay: 'Geegpay Transfer',
+      payoneer: 'Payoneer Transfer',
       bank: 'Bank Transfer',
       giftcard: `Gift Card (${selectedGiftType})`,
     }[payMethod];
@@ -241,9 +282,9 @@ export default function Checkout() {
       const addonNames = ADDON_PRODUCTS.filter(a => selectedAddons.includes(a.id)).map(a => a.name);
       notesArr.push(`Add-ons: ${addonNames.join(', ')}`);
     }
-    if (promoDiscount) {
-      notesArr.push(`Promo: ${promoDiscount.code} (-${format(promoSavings)})`);
-    }
+    if (hasBulkItem) notesArr.push(`Bulk discount applied: -${BULK_DISCOUNT_PCT}%`);
+    if (promoDiscount) notesArr.push(`Promo: ${promoDiscount.code} (-${format(promoSavings)})`);
+    if (payMethod === 'giftcard') notesArr.push(`Gift card 5% auto-discount applied`);
 
     const { data: order, error } = await supabase.from('orders').insert({
       customer_name: form.name,
@@ -284,8 +325,15 @@ export default function Checkout() {
 
     await sendEmailNotification(order.id);
     clearCart();
-    toast.success('Order placed successfully!');
-    navigate(`/order-confirmation/${order.id}`);
+    toast.success('Order placed! Please send your payment proof below.');
+
+    // For gift card and crypto, show the proof message box instead of navigating
+    if (payMethod === 'giftcard' || payMethod === 'crypto') {
+      setCompletedOrderId(order.id);
+      setLoading(false);
+    } else {
+      navigate(`/order-confirmation/${order.id}`);
+    }
   };
 
   const InputClass = "w-full px-4 py-3 bg-[#F5F5F2] border border-[#E0E0DC] rounded-xl text-sm text-[#111111] placeholder-[#AAAAAA] focus:outline-none focus:border-[#E6C200] font-600 transition-colors";
@@ -296,7 +344,7 @@ export default function Checkout() {
     </div>
   );
 
-  if (items.length === 0) return (
+  if (items.length === 0 && !completedOrderId) return (
     <div className="min-h-screen bg-[#F5F5F2]">
       <Navbar />
       <div className="flex flex-col items-center justify-center h-[70vh] gap-4 px-4">
@@ -308,6 +356,95 @@ export default function Checkout() {
       </div>
     </div>
   );
+
+  // ── POST-CHECKOUT PROOF MESSAGE SCREEN ──────────────────────────────
+  if (completedOrderId) {
+    return (
+      <div className="min-h-screen bg-[#F5F5F2]">
+        <Navbar />
+        <div className="max-w-lg mx-auto px-4 py-14">
+          <div className="bg-white border border-[#E0E0DC] rounded-2xl overflow-hidden">
+            {/* Header */}
+            <div className="bg-[#111111] p-6 text-center">
+              <div className="w-12 h-12 bg-[#E6C200] rounded-full flex items-center justify-center mx-auto mb-3">
+                <Check className="w-6 h-6 text-black" />
+              </div>
+              <h2 className="text-xl font-900 text-white">Order Placed!</h2>
+              <p className="text-sm text-[#888888] mt-1 font-mono break-all">#{completedOrderId.slice(0, 16)}...</p>
+            </div>
+
+            {/* Chat message area */}
+            <div className="p-6 space-y-5">
+              {!messageSent ? (
+                <>
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 bg-[#E6C200] rounded-full flex items-center justify-center flex-shrink-0">
+                      <MessageSquare className="w-4 h-4 text-black" />
+                    </div>
+                    <div className="bg-[#F5F5F2] rounded-2xl rounded-tl-none px-4 py-3 flex-1">
+                      <p className="text-xs font-700 text-[#888888] mb-1">Ninjadaddy Admin</p>
+                      <p className="text-sm text-[#111111] font-500 leading-relaxed">
+                        Hi {form.name || 'there'}! 👋 Your order is received.
+                        {payMethod === 'giftcard'
+                          ? ' Please send proof of your gift card payment below — a screenshot or confirmation showing the card type, code and value.'
+                          : ' Please paste your transaction hash or screenshot proof of payment below so we can verify quickly.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <label className="text-xs font-700 text-[#555555] block">
+                      {payMethod === 'giftcard'
+                        ? 'Send gift card details / screenshot description'
+                        : 'Send payment proof / transaction details'}
+                    </label>
+                    <textarea
+                      value={proofMessage}
+                      onChange={e => setProofMessage(e.target.value)}
+                      rows={4}
+                      placeholder={payMethod === 'giftcard'
+                        ? 'E.g. "Amazon gift card $50 — code: XXXX-XXXX-XXXX-XXXX, screenshot sent to WhatsApp"'
+                        : 'E.g. "Sent 0.032 ETH, TX Hash: 0x123...abc, from Binance"'}
+                      className={`${InputClass} resize-none`}
+                    />
+                    <div className="flex gap-3">
+                      <button
+                        onClick={handleSendProof}
+                        disabled={!proofMessage.trim() || sendingMsg}
+                        className="flex-1 flex items-center justify-center gap-2 py-3 bg-[#E6C200] text-black font-800 rounded-xl hover:bg-[#B8A000] transition-colors disabled:opacity-50"
+                      >
+                        {sendingMsg
+                          ? <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                          : <><Send className="w-4 h-4" /> Send to Admin</>
+                        }
+                      </button>
+                      <button
+                        onClick={() => navigate(`/order-confirmation/${completedOrderId}`)}
+                        className="px-4 py-3 border border-[#E0E0DC] text-[#888888] font-700 rounded-xl hover:border-[#E6C200] transition-colors text-sm"
+                      >
+                        Skip
+                      </button>
+                    </div>
+                    <p className="text-xs text-center text-[#AAAAAA] font-500">
+                      This message goes directly to admin. You can also reach us on WhatsApp.
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-6">
+                  <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <Check className="w-6 h-6 text-green-600" />
+                  </div>
+                  <p className="font-800 text-[#111111]">Message Sent!</p>
+                  <p className="text-sm text-[#888888] font-500 mt-1">Admin will verify and confirm within 24h.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#F5F5F2]">
@@ -481,16 +618,27 @@ export default function Checkout() {
 
               {/* Payment */}
               <SectionCard title="Payment Method">
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {/* Gift card auto-discount notice */}
+                <div className="p-3 bg-[#FFF9E0] border border-[#E6C200]/50 rounded-xl flex items-start gap-2">
+                  <Gift className="w-4 h-4 text-[#B8A000] flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-800 text-[#B8A000]">Gift Card = 5% Extra Off Automatically</p>
+                    <p className="text-xs text-[#888888] font-500 mt-0.5">Select "Gift Card" as payment and get an instant 5% discount on your order total.</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                   {([
-                    ['crypto', CreditCard, 'Crypto'],
-                    ['wise', Repeat, 'Wise'],
-                    ['bank', Landmark, 'Bank'],
-                    ['giftcard', Gift, 'Gift Card']
-                  ] as [PayMethod, React.FC<{className?: string}>, string][]).map(([v, Icon, label]) => (
+                    ['crypto', '₿', 'Crypto'],
+                    ['geegpay', '🌍', 'Geegpay'],
+                    ['payoneer', '💳', 'Payoneer'],
+                    ['bank', '🏦', 'Bank'],
+                    ['giftcard', '🎁', 'Gift Card'],
+                  ] as [PayMethod, string, string][]).map(([v, emoji, label]) => (
                     <button type="button" key={v} onClick={() => setPayMethod(v)}
                       className={`p-3 rounded-xl border-2 flex flex-col items-center gap-1.5 text-xs font-700 transition-all ${payMethod === v ? 'border-[#E6C200] bg-[#FFF9E0] text-[#111111]' : 'border-[#E0E0DC] bg-white text-[#888888] hover:border-[#E6C200]/50'}`}>
-                      <Icon className="w-4 h-4" />{label}
+                      <span className="text-base">{emoji}</span>
+                      {label}
                     </button>
                   ))}
                 </div>
@@ -510,20 +658,44 @@ export default function Checkout() {
                       <input type="text" name="reference" value={form.reference} onChange={handleChange}
                         placeholder="0x... paste your transaction hash" className={InputClass} />
                     </div>
+                    <p className="text-xs text-[#888888] font-500 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+                      💬 After placing order, you'll be prompted to send payment proof directly to admin.
+                    </p>
                   </div>
                 )}
 
-                {payMethod === 'wise' && (
+                {payMethod === 'geegpay' && (
                   <div className="p-4 sm:p-5 bg-[#F5F5F2] border border-[#E0E0DC] rounded-xl space-y-3">
-                    <p className="text-sm font-800 text-[#111111]">Wise Transfer</p>
-                    <p className="text-sm text-[#555555] font-500">Send <span className="font-800 text-[#111111]">${total.toFixed(2)}</span> to:</p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl">🌍</span>
+                      <p className="text-sm font-800 text-[#111111]">Geegpay Transfer</p>
+                    </div>
+                    <p className="text-sm text-[#555555] font-500">Send <span className="font-800 text-[#111111]">${total.toFixed(2)}</span> via Geegpay:</p>
                     <div className="p-3 bg-white border border-[#E0E0DC] rounded-xl">
-                      <p className="text-sm text-[#111111] font-700 font-mono">{wiseEmail || 'Wise email not configured'}</p>
+                      <p className="text-sm text-[#111111] font-600 whitespace-pre-wrap">{geegpayInfo || 'Contact admin for Geegpay account details'}</p>
                     </div>
                     <div>
-                      <label className="text-xs font-700 text-[#555555] block mb-1.5">Your Wise Account Name *</label>
+                      <label className="text-xs font-700 text-[#555555] block mb-1.5">Geegpay Transfer Reference *</label>
                       <input type="text" name="reference" value={form.reference} onChange={handleChange}
-                        placeholder="Enter your Wise account display name" className={InputClass} />
+                        placeholder="Enter your Geegpay transaction reference" className={InputClass} />
+                    </div>
+                  </div>
+                )}
+
+                {payMethod === 'payoneer' && (
+                  <div className="p-4 sm:p-5 bg-[#F5F5F2] border border-[#E0E0DC] rounded-xl space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl">💳</span>
+                      <p className="text-sm font-800 text-[#111111]">Payoneer Transfer</p>
+                    </div>
+                    <p className="text-sm text-[#555555] font-500">Send <span className="font-800 text-[#111111]">${total.toFixed(2)}</span> to this Payoneer account:</p>
+                    <div className="p-3 bg-white border border-[#E0E0DC] rounded-xl">
+                      <p className="text-sm text-[#111111] font-700 font-mono">{payoneerEmail || 'Payoneer email not configured — check Admin Settings'}</p>
+                    </div>
+                    <div>
+                      <label className="text-xs font-700 text-[#555555] block mb-1.5">Your Payoneer Account / Reference *</label>
+                      <input type="text" name="reference" value={form.reference} onChange={handleChange}
+                        placeholder="Your Payoneer email or transaction reference" className={InputClass} />
                     </div>
                   </div>
                 )}
@@ -553,7 +725,13 @@ export default function Checkout() {
 
                 {payMethod === 'giftcard' && (
                   <div className="p-4 sm:p-5 bg-[#F5F5F2] border border-[#E0E0DC] rounded-xl space-y-3">
+                    {/* 5% auto-discount highlight */}
+                    <div className="flex items-center gap-2 p-2.5 bg-green-50 border border-green-200 rounded-xl">
+                      <Check className="w-4 h-4 text-green-600 flex-shrink-0" />
+                      <p className="text-sm font-800 text-green-700">5% auto-discount applied to this order!</p>
+                    </div>
                     <p className="text-sm font-800 text-[#111111]">E-Gift Card Payment</p>
+                    <p className="text-xs text-[#888888] font-500">We accept Amazon, Apple, Google Play, and other major gift cards. Admin will verify the card value manually. You'll be prompted to send proof after checkout.</p>
                     <div className="grid grid-cols-4 gap-2">
                       {GIFT_CARD_TYPES.map(gc => (
                         <button type="button" key={gc.id} onClick={() => setSelectedGiftType(gc.id)}
@@ -568,7 +746,9 @@ export default function Checkout() {
                       <input type="text" value={giftCode} onChange={e => setGiftCode(e.target.value)}
                         placeholder="Enter gift card redemption code" className={InputClass} />
                     </div>
-                    <p className="text-xs text-[#888888] font-500 italic">Admin will manually verify gift card value before processing.</p>
+                    <p className="text-xs text-[#888888] font-500 italic bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+                      💬 After placing your order, you'll be prompted to send photo proof of the gift card directly to admin for verification.
+                    </p>
                   </div>
                 )}
               </SectionCard>
@@ -594,6 +774,9 @@ export default function Checkout() {
                           <p className="text-xs font-700 text-[#111111] line-clamp-1">{item.product.title}</p>
                           {item.variant && <p className="text-xs text-[#888888] font-500">{[item.variant.color, item.variant.size].filter(Boolean).join(' / ')}</p>}
                           <p className="text-xs font-800 text-[#111111]">{format(itemPrice)} × {item.quantity}</p>
+                          {item.quantity >= BULK_QTY_THRESHOLD && (
+                            <p className="text-xs text-green-600 font-700">🎉 Bulk 10% off applied</p>
+                          )}
                         </div>
                       </div>
                     );
@@ -624,6 +807,12 @@ export default function Checkout() {
                       <span className="font-700 text-[#111111]">{format(addonTotal)}</span>
                     </div>
                   )}
+                  {hasBulkItem && (
+                    <div className="flex justify-between text-sm text-green-600">
+                      <span className="font-700">Bulk Discount (×2) 🎉</span>
+                      <span className="font-800">-{format(bulkSavings)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-sm">
                     <span className="text-[#888888] font-600">Shipping {country === 'United States' ? '🇺🇸' : '🇬🇧'}</span>
                     <span className="font-700 text-[#111111]">{format(shippingFee)}</span>
@@ -632,6 +821,12 @@ export default function Checkout() {
                     <div className="flex justify-between text-sm text-green-600">
                       <span className="font-700 flex items-center gap-1"><Tag className="w-3 h-3" /> {promoDiscount?.code}</span>
                       <span className="font-800">-{format(promoSavings)}</span>
+                    </div>
+                  )}
+                  {giftCardSavings > 0 && (
+                    <div className="flex justify-between text-sm text-green-600">
+                      <span className="font-700 flex items-center gap-1"><Gift className="w-3 h-3" /> Gift Card 5%</span>
+                      <span className="font-800">-{format(giftCardSavings)}</span>
                     </div>
                   )}
                   <div className="flex justify-between font-900 text-lg border-t border-[#E0E0DC] pt-2">

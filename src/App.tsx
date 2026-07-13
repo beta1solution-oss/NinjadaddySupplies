@@ -25,6 +25,7 @@ import AdminCategories from "./pages/admin/Categories";
 import AdminSettings from "./pages/admin/Settings";
 import AdminGiftCards from "./pages/admin/GiftCards";
 import AdminDiscounts from "./pages/admin/Discounts";
+import AdminMessages from "./pages/admin/Messages";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1 } }
@@ -70,7 +71,7 @@ const App = () => (
               <Route path="/order-confirmation/:id" element={<OrderConfirmation />} />
               <Route path="/track-order" element={<TrackOrder />} />
 
-              {/* Admin Auth — explicitly mapped */}
+              {/* Admin Auth */}
               <Route path="/admin" element={<AdminLoginRoute />} />
               <Route path="/admin/login" element={<AdminLoginRoute />} />
 
@@ -82,6 +83,7 @@ const App = () => (
               <Route path="/admin/discounts" element={<ProtectedAdminRoute><AdminDiscounts /></ProtectedAdminRoute>} />
               <Route path="/admin/settings" element={<ProtectedAdminRoute><AdminSettings /></ProtectedAdminRoute>} />
               <Route path="/admin/gift-cards" element={<ProtectedAdminRoute><AdminGiftCards /></ProtectedAdminRoute>} />
+              <Route path="/admin/messages" element={<ProtectedAdminRoute><AdminMessages /></ProtectedAdminRoute>} />
 
               <Route path="*" element={<NotFound />} />
             </Routes>
