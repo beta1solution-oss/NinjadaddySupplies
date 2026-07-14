@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { MessageSquare, CheckCheck, Trash2, RefreshCw, ExternalLink } from 'lucide-react';
+import { MessageSquare, CheckCheck, Trash2, RefreshCw, ExternalLink, Send, Reply } from 'lucide-react';
 import AdminLayout from '@/components/layout/AdminLayout';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
@@ -11,6 +11,8 @@ interface Message {
   customer_email: string | null;
   message: string;
   is_read: boolean;
+  reply_text: string | null;
+  replied_at: string | null;
   created_at: string;
 }
 
@@ -29,6 +31,8 @@ export default function AdminMessages() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Message | null>(null);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
+  const [replyText, setReplyText] = useState('');
+  const [sendingReply, setSendingReply] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const load = async () => {
@@ -37,7 +41,14 @@ export default function AdminMessages() {
       .from('messages')
       .select('*')
       .order('created_at', { ascending: false });
-    if (data) setMessages(data as Message[]);
+    if (data) {
+      setMessages(data as Message[]);
+      // Update selected if it exists to reflect latest reply state
+      if (selected) {
+        const updated = data.find((m) => m.id === selected.id);
+        if (updated) setSelected(updated as Message);
+      }
+    }
     setLoading(false);
   };
 
@@ -55,6 +66,7 @@ export default function AdminMessages() {
       setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, is_read: true } : m));
     }
     setSelected(msg.is_read ? msg : { ...msg, is_read: true });
+    setReplyText(msg.reply_text || '');
   };
 
   const deleteMsg = async (id: string) => {
@@ -70,6 +82,35 @@ export default function AdminMessages() {
     toast.success('All messages marked as read');
   };
 
+  const sendReply = async () => {
+    if (!replyText.trim() || !selected) return;
+    setSendingReply(true);
+    const { error } = await supabase.from('messages').update({
+      reply_text: replyText.trim(),
+      replied_at: new Date().toISOString(),
+    }).eq('id', selected.id);
+    if (!error) {
+      const updated = { ...selected, reply_text: replyText.trim(), replied_at: new Date().toISOString() };
+      setSelected(updated);
+      setMessages(prev => prev.map(m => m.id === selected.id ? updated : m));
+      toast.success('Reply saved! Share it with the customer via WhatsApp or email.');
+    } else {
+      toast.error('Failed to save reply');
+    }
+    setSendingReply(false);
+    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+  };
+
+  const clearReply = async () => {
+    if (!selected) return;
+    await supabase.from('messages').update({ reply_text: null, replied_at: null }).eq('id', selected.id);
+    const updated = { ...selected, reply_text: null, replied_at: null };
+    setSelected(updated);
+    setMessages(prev => prev.map(m => m.id === selected.id ? updated : m));
+    setReplyText('');
+    toast.success('Reply cleared');
+  };
+
   const filtered = filter === 'unread' ? messages.filter(m => !m.is_read) : messages;
   const unreadCount = messages.filter(m => !m.is_read).length;
 
@@ -81,7 +122,7 @@ export default function AdminMessages() {
           <div className="flex items-center gap-3">
             <h1 className="text-xl sm:text-2xl font-bold text-[#F5F5F7]">Customer Messages</h1>
             {unreadCount > 0 && (
-              <span className="w-6 h-6 bg-[#FFCC00] text-black text-xs font-900 rounded-full flex items-center justify-center">
+              <span className="min-w-[1.5rem] h-6 px-1.5 bg-[#FFCC00] text-black text-xs font-900 rounded-full flex items-center justify-center">
                 {unreadCount}
               </span>
             )}
@@ -142,7 +183,6 @@ export default function AdminMessages() {
                       selected?.id === msg.id ? 'bg-[#1E1E1E] border-l-2 border-[#FFCC00]' : ''
                     }`}
                   >
-                    {/* Unread dot */}
                     <div className="flex-shrink-0 mt-1">
                       <div className={`w-2 h-2 rounded-full ${msg.is_read ? 'bg-transparent' : 'bg-[#FFCC00]'}`} />
                     </div>
@@ -155,6 +195,12 @@ export default function AdminMessages() {
                       </div>
                       <p className="text-xs text-[#555555] font-mono truncate">#{msg.order_id.slice(0, 12)}…</p>
                       <p className="text-xs text-[#777777] font-500 mt-1 line-clamp-2">{msg.message}</p>
+                      {msg.reply_text && (
+                        <div className="mt-1.5 flex items-center gap-1">
+                          <Reply className="w-3 h-3 text-[#FFCC00]" />
+                          <p className="text-xs text-[#FFCC00] font-600 truncate">Replied</p>
+                        </div>
+                      )}
                     </div>
                   </button>
                 ))
@@ -163,11 +209,11 @@ export default function AdminMessages() {
           </div>
 
           {/* Message detail / chat bubble view */}
-          <div className="flex-1 bg-[#161616] border border-[#333333] rounded-2xl flex flex-col overflow-hidden hidden md:flex">
+          <div className="flex-1 bg-[#161616] border border-[#333333] rounded-2xl flex-col overflow-hidden hidden md:flex">
             {selected ? (
               <>
                 {/* Chat header */}
-                <div className="p-4 border-b border-[#222222] flex items-center justify-between">
+                <div className="p-4 border-b border-[#222222] flex items-center justify-between flex-shrink-0">
                   <div className="flex items-center gap-3">
                     <div className="w-9 h-9 rounded-full bg-[#FFCC00]/20 flex items-center justify-center">
                       <span className="text-sm font-900 text-[#FFCC00]">
@@ -183,16 +229,14 @@ export default function AdminMessages() {
                   </div>
                   <div className="flex items-center gap-2">
                     <a
-                      href={`/admin/orders`}
+                      href="/admin/orders"
                       className="flex items-center gap-1.5 px-3 py-1.5 bg-[#222222] border border-[#333333] rounded-xl text-xs text-[#888888] hover:text-[#FFCC00] transition-colors font-700"
-                      title="View order"
                     >
-                      <ExternalLink className="w-3.5 h-3.5" /> View Order
+                      <ExternalLink className="w-3.5 h-3.5" /> View Orders
                     </a>
                     <button
                       onClick={() => deleteMsg(selected.id)}
                       className="p-1.5 text-[#555555] hover:text-red-400 transition-colors"
-                      title="Delete message"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -200,21 +244,23 @@ export default function AdminMessages() {
                 </div>
 
                 {/* Order ID reference */}
-                <div className="px-5 py-2 border-b border-[#1E1E1E]">
+                <div className="px-5 py-2 border-b border-[#1E1E1E] flex-shrink-0">
                   <p className="text-xs text-[#555555] font-500">
                     Order ID: <span className="font-mono text-[#FFCC00]">{selected.order_id}</span>
                   </p>
                 </div>
 
-                {/* Message bubble */}
-                <div className="flex-1 overflow-y-auto p-5">
+                {/* Chat bubbles area */}
+                <div className="flex-1 overflow-y-auto p-5 space-y-5">
+                  {/* Customer message bubble */}
                   <div className="flex items-start gap-3">
                     <div className="w-8 h-8 rounded-full bg-[#FFCC00]/20 flex items-center justify-center flex-shrink-0">
                       <span className="text-xs font-900 text-[#FFCC00]">
                         {selected.customer_name[0]?.toUpperCase()}
                       </span>
                     </div>
-                    <div className="max-w-md">
+                    <div className="max-w-[75%]">
+                      <p className="text-xs text-[#555555] mb-1 font-600">{selected.customer_name}</p>
                       <div className="bg-[#222222] rounded-2xl rounded-tl-none px-4 py-3">
                         <p className="text-sm text-[#F5F5F7] font-500 leading-relaxed whitespace-pre-wrap">
                           {selected.message}
@@ -233,14 +279,73 @@ export default function AdminMessages() {
                     </div>
                   </div>
 
-                  {/* Admin reply hint */}
-                  <div className="mt-6 p-3 bg-[#1E1E1E] border border-[#2A2A2A] rounded-xl text-center">
-                    <p className="text-xs text-[#555555] font-500">
-                      To respond, contact the customer via WhatsApp or their email address above. Reply functionality coming soon.
-                    </p>
-                  </div>
+                  {/* Admin reply bubble (if exists) */}
+                  {selected.reply_text && (
+                    <div className="flex items-start gap-3 flex-row-reverse">
+                      <div className="w-8 h-8 rounded-full bg-[#FFCC00] flex items-center justify-center flex-shrink-0">
+                        <span className="text-xs font-900 text-black">A</span>
+                      </div>
+                      <div className="max-w-[75%]">
+                        <p className="text-xs text-[#555555] mb-1 font-600 text-right">You (Admin)</p>
+                        <div className="bg-[#FFCC00]/10 border border-[#FFCC00]/20 rounded-2xl rounded-tr-none px-4 py-3">
+                          <p className="text-sm text-[#F5F5F7] font-500 leading-relaxed whitespace-pre-wrap">
+                            {selected.reply_text}
+                          </p>
+                        </div>
+                        {selected.replied_at && (
+                          <p className="text-xs text-[#555555] mt-1.5 mr-1 text-right">
+                            {new Date(selected.replied_at).toLocaleString('en-US', {
+                              month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                            })}
+                          </p>
+                        )}
+                        <div className="flex justify-end mt-1">
+                          <button
+                            onClick={clearReply}
+                            className="text-xs text-red-400 hover:text-red-300 hover:underline transition-colors"
+                          >
+                            Clear reply
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div ref={bottomRef} />
                 </div>
-                <div ref={bottomRef} />
+
+                {/* Reply input */}
+                <div className="p-4 border-t border-[#222222] flex-shrink-0">
+                  <p className="text-xs text-[#555555] font-500 mb-2">
+                    {selected.reply_text
+                      ? 'Edit your reply below and save again'
+                      : 'Write a reply — share it with customer via WhatsApp or email'}
+                  </p>
+                  <div className="flex gap-2">
+                    <textarea
+                      value={replyText}
+                      onChange={e => setReplyText(e.target.value)}
+                      rows={2}
+                      placeholder="Type your reply here..."
+                      className="flex-1 px-3 py-2 bg-[#222222] border border-[#333333] rounded-xl text-sm text-[#F5F5F7] placeholder-[#555555] focus:outline-none focus:border-[#FFCC00]/50 resize-none transition-colors"
+                    />
+                    <button
+                      onClick={sendReply}
+                      disabled={!replyText.trim() || sendingReply}
+                      className="px-4 py-2 bg-[#FFCC00] text-black font-bold rounded-xl hover:bg-[#E6B800] transition-colors disabled:opacity-40 flex items-center gap-2 self-end"
+                    >
+                      {sendingReply
+                        ? <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                        : <><Send className="w-4 h-4" /> Save</>
+                      }
+                    </button>
+                  </div>
+                  {selected.customer_email && (
+                    <p className="text-xs text-[#444444] mt-2 font-500">
+                      Copy reply above → send to <span className="text-[#FFCC00]">{selected.customer_email}</span> or WhatsApp
+                    </p>
+                  )}
+                </div>
               </>
             ) : (
               <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center p-8">
@@ -248,7 +353,7 @@ export default function AdminMessages() {
                   <MessageSquare className="w-8 h-8 text-[#FFCC00]/50" />
                 </div>
                 <p className="text-sm text-[#555555] font-500 max-w-xs">
-                  Select a message from the list to view customer payment proof and order details
+                  Select a message from the list to view customer payment proof and compose a reply
                 </p>
               </div>
             )}

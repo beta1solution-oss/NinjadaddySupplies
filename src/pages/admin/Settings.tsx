@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Save, Plus, Trash2, Eye, EyeOff, KeyRound, Star, ExternalLink, ChevronDown, ChevronUp, CheckCircle2 } from 'lucide-react';
 import AdminLayout from '@/components/layout/AdminLayout';
 import { supabase } from '@/lib/supabase';
@@ -56,6 +56,106 @@ const TEMPLATE_VARS = [
   { var: '{{tracking_link}}', desc: 'Direct 17TRACK link' },
 ];
 
+const inputCls = "w-full px-3 py-2.5 bg-[#161616] border border-[#3A3A3A] rounded-xl text-sm text-[#EEEEEE] placeholder-[#555555] focus:outline-none focus:border-[#FFCC00]/60 transition-colors";
+
+// ─── These components MUST be defined OUTSIDE the page component ───
+// Defining them inside causes React to remount on every keystroke (the typing bug)
+
+interface SettingInputProps {
+  settingKey: string;
+  label: string;
+  placeholder: string;
+  type?: string;
+  initialValue: string;
+  saving: string | null;
+  onSave: (key: string, value: string) => void;
+}
+
+function SettingInput({ settingKey, label, placeholder, type = 'text', initialValue, saving, onSave }: SettingInputProps) {
+  const [val, setVal] = useState(initialValue);
+
+  useEffect(() => {
+    setVal(initialValue);
+  }, [initialValue]);
+
+  return (
+    <div>
+      <label className="text-xs text-[#999999] font-600 block mb-1.5">{label}</label>
+      <div className="flex gap-2">
+        <input
+          type={type}
+          value={val}
+          onChange={e => setVal(e.target.value)}
+          placeholder={placeholder}
+          className={`${inputCls} flex-1`}
+        />
+        <button
+          onClick={() => onSave(settingKey, val)}
+          disabled={saving === settingKey}
+          className="px-3 py-2.5 bg-[#FFCC00] text-black text-sm font-bold rounded-xl hover:bg-[#E6B800] transition-colors disabled:opacity-60 flex-shrink-0"
+        >
+          {saving === settingKey ? '...' : <Save className="w-4 h-4" />}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+interface TextAreaSettingProps {
+  settingKey: string;
+  label: string;
+  initialValue: string;
+  saving: string | null;
+  onSave: (key: string, value: string) => void;
+}
+
+function TextAreaSetting({ settingKey, label, initialValue, saving, onSave }: TextAreaSettingProps) {
+  const [val, setVal] = useState(initialValue);
+
+  useEffect(() => {
+    setVal(initialValue);
+  }, [initialValue]);
+
+  return (
+    <div>
+      <label className="text-xs text-[#999999] font-600 block mb-1.5">{label}</label>
+      <textarea
+        value={val}
+        onChange={e => setVal(e.target.value)}
+        rows={5}
+        className={`${inputCls} resize-none w-full`}
+      />
+      <button
+        onClick={() => onSave(settingKey, val)}
+        disabled={saving === settingKey}
+        className="mt-2 flex items-center gap-2 px-4 py-2 bg-[#FFCC00] text-black text-sm font-bold rounded-xl hover:bg-[#E6B800] disabled:opacity-60"
+      >
+        <Save className="w-4 h-4" /> {saving === settingKey ? 'Saving...' : 'Save'}
+      </button>
+    </div>
+  );
+}
+
+interface SectionProps {
+  title: string;
+  children: React.ReactNode;
+  badge?: React.ReactNode;
+}
+
+function Section({ title, children, badge }: SectionProps) {
+  return (
+    <div className="bg-[#222222] border border-[#333333] rounded-2xl overflow-hidden">
+      <div className="px-5 py-4 border-b border-[#2E2E2E] bg-[#1C1C1C] flex items-center justify-between">
+        <h2 className="font-bold text-[#EEEEEE] text-sm">{title}</h2>
+        {badge}
+      </div>
+      <div className="p-5 space-y-4">{children}</div>
+    </div>
+  );
+}
+
+// ─── Main Page Component ───────────────────────────────────────────
+
 export default function AdminSettings() {
   const { updatePassword } = useAdmin();
   const [settings, setSettings] = useState<SettingsMap>({});
@@ -89,13 +189,13 @@ export default function AdminSettings() {
     load();
   }, []);
 
-  const saveSetting = async (key: string, value: string) => {
+  const saveSetting = useCallback(async (key: string, value: string) => {
     setSaving(key);
     const { error } = await supabase.from('settings').upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' });
     if (!error) { setSettings(prev => ({ ...prev, [key]: value })); toast.success('Saved!'); }
     else toast.error('Failed to save');
     setSaving(null);
-  };
+  }, []);
 
   const saveBankAccounts = async (accounts: BankAccount[]) => {
     setBankAccounts(accounts);
@@ -142,51 +242,6 @@ export default function AdminSettings() {
 
   const hasEmailjsConfigured = settings['emailjs_service_id'] && settings['emailjs_template_id'];
 
-  const inputCls = "w-full px-3 py-2.5 bg-[#161616] border border-[#3A3A3A] rounded-xl text-sm text-[#EEEEEE] placeholder-[#555555] focus:outline-none focus:border-[#FFCC00]/60 transition-colors";
-
-  const Section = ({ title, children, badge }: { title: string; children: React.ReactNode; badge?: React.ReactNode }) => (
-    <div className="bg-[#222222] border border-[#333333] rounded-2xl overflow-hidden">
-      <div className="px-5 py-4 border-b border-[#2E2E2E] bg-[#1C1C1C] flex items-center justify-between">
-        <h2 className="font-bold text-[#EEEEEE] text-sm">{title}</h2>
-        {badge}
-      </div>
-      <div className="p-5 space-y-4">{children}</div>
-    </div>
-  );
-
-  const SettingInput = ({ settingKey, label, placeholder, type = 'text' }: { settingKey: string; label: string; placeholder: string; type?: string }) => {
-    const [val, setVal] = useState(settings[settingKey] || '');
-    useEffect(() => setVal(settings[settingKey] || ''), [settings[settingKey]]);
-    return (
-      <div>
-        <label className="text-xs text-[#999999] font-600 block mb-1.5">{label}</label>
-        <div className="flex gap-2">
-          <input type={type} value={val} onChange={e => setVal(e.target.value)} placeholder={placeholder} className={`${inputCls} flex-1`} />
-          <button onClick={() => saveSetting(settingKey, val)} disabled={saving === settingKey}
-            className="px-3 py-2.5 bg-[#FFCC00] text-black text-sm font-bold rounded-xl hover:bg-[#E6B800] transition-colors disabled:opacity-60 flex-shrink-0">
-            {saving === settingKey ? '...' : <Save className="w-4 h-4" />}
-          </button>
-        </div>
-      </div>
-    );
-  };
-
-  const TextAreaSetting = ({ settingKey, label }: { settingKey: string; label: string }) => {
-    const [val, setVal] = useState(settings[settingKey] || '');
-    useEffect(() => setVal(settings[settingKey] || ''), [settings[settingKey]]);
-    return (
-      <div>
-        <label className="text-xs text-[#999999] font-600 block mb-1.5">{label}</label>
-        <textarea value={val} onChange={e => setVal(e.target.value)} rows={5}
-          className={`${inputCls} resize-none w-full`} />
-        <button onClick={() => saveSetting(settingKey, val)} disabled={saving === settingKey}
-          className="mt-2 flex items-center gap-2 px-4 py-2 bg-[#FFCC00] text-black text-sm font-bold rounded-xl hover:bg-[#E6B800] disabled:opacity-60">
-          <Save className="w-4 h-4" /> {saving === settingKey ? 'Saving...' : 'Save'}
-        </button>
-      </div>
-    );
-  };
-
   if (loading) return <AdminLayout><div className="text-center py-20 text-[#888888]">Loading settings...</div></AdminLayout>;
 
   return (
@@ -203,7 +258,6 @@ export default function AdminSettings() {
               : <span className="text-xs text-amber-400 font-600 bg-amber-400/10 px-2 py-0.5 rounded-full">Setup Required</span>
           }
         >
-          {/* Step-by-step guide toggle */}
           <button
             onClick={() => setEmailGuideOpen(o => !o)}
             className="w-full flex items-center justify-between p-3 bg-[#1A1A1A] border border-[#FFCC00]/20 rounded-xl text-sm text-[#FFCC00] font-700 hover:bg-[#FFCC00]/5 transition-colors"
@@ -213,8 +267,7 @@ export default function AdminSettings() {
           </button>
 
           {emailGuideOpen && (
-            <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
-              {/* Steps */}
+            <div className="space-y-3">
               {EMAILJS_STEPS.map(({ step, title, desc, link, linkLabel }) => (
                 <div key={step} className="flex gap-3 p-3.5 bg-[#1A1A1A] border border-[#2E2E2E] rounded-xl">
                   <div className="w-7 h-7 bg-[#FFCC00] text-black rounded-full flex items-center justify-center font-900 text-xs flex-shrink-0">{step}</div>
@@ -240,8 +293,6 @@ export default function AdminSettings() {
                   </div>
                 </div>
               ))}
-
-              {/* Sample template */}
               <div className="p-3 bg-[#111111] border border-[#2E2E2E] rounded-xl">
                 <p className="text-xs font-700 text-[#FFCC00] mb-2">📝 Sample Template Subject & Body</p>
                 <p className="text-xs text-[#777777] mb-1"><strong className="text-[#999999]">Subject:</strong> Your Ninjadaddy Order Update — {'{{order_status}}'}</p>
@@ -259,18 +310,18 @@ export default function AdminSettings() {
           )}
 
           <div className="space-y-3 pt-2 border-t border-[#2E2E2E]">
-            <p className="text-xs text-[#777777]">Enter your EmailJS credentials below. These are used to send automatic order emails to customers.</p>
-            <SettingInput settingKey="emailjs_service_id" label="Service ID (e.g. service_abc123)" placeholder="service_xxxxxxx" />
-            <SettingInput settingKey="emailjs_template_id" label="Template ID (e.g. template_abc123)" placeholder="template_xxxxxxx" />
-            <SettingInput settingKey="emailjs_public_key" label="Public Key" placeholder="h7UDz0N4LIdd94R9O" />
-            <SettingInput settingKey="emailjs_to_email" label="Admin Notification Email" placeholder="ninjadaddy@gmail.com" />
+            <p className="text-xs text-[#777777]">Enter your EmailJS credentials below.</p>
+            <SettingInput settingKey="emailjs_service_id" label="Service ID (e.g. service_abc123)" placeholder="service_xxxxxxx" initialValue={settings['emailjs_service_id'] || ''} saving={saving} onSave={saveSetting} />
+            <SettingInput settingKey="emailjs_template_id" label="Template ID (e.g. template_abc123)" placeholder="template_xxxxxxx" initialValue={settings['emailjs_template_id'] || ''} saving={saving} onSave={saveSetting} />
+            <SettingInput settingKey="emailjs_public_key" label="Public Key" placeholder="h7UDz0N4LIdd94R9O" initialValue={settings['emailjs_public_key'] || ''} saving={saving} onSave={saveSetting} />
+            <SettingInput settingKey="emailjs_to_email" label="Admin Notification Email" placeholder="ninjadaddy@gmail.com" initialValue={settings['emailjs_to_email'] || ''} saving={saving} onSave={saveSetting} />
           </div>
         </Section>
 
         {/* Payment Settings */}
         <Section title="💳 Payment Settings">
           {PAYMENT_KEYS.map(({ key, label, placeholder }) => (
-            <SettingInput key={key} settingKey={key} label={label} placeholder={placeholder} />
+            <SettingInput key={key} settingKey={key} label={label} placeholder={placeholder} initialValue={settings[key] || ''} saving={saving} onSave={saveSetting} />
           ))}
         </Section>
 
@@ -330,9 +381,13 @@ export default function AdminSettings() {
             <div key={key}>
               <label className="text-xs font-600 block mb-1.5" style={{ color }}>{label}</label>
               <div className="flex gap-2">
-                <input defaultValue={settings[key] || ''} key={settings[key]}
+                <input
+                  defaultValue={settings[key] || ''}
+                  key={`social-${key}-${settings[key] !== undefined ? 'loaded' : 'loading'}`}
                   onBlur={e => { if (e.target.value !== settings[key]) saveSetting(key, e.target.value); }}
-                  placeholder={placeholder} className={`${inputCls} flex-1`} />
+                  placeholder={placeholder}
+                  className={`${inputCls} flex-1`}
+                />
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center border border-[#333333] flex-shrink-0" style={{ backgroundColor: color + '22' }}>
                   <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
                 </div>
@@ -363,7 +418,7 @@ export default function AdminSettings() {
               </div>
             ))}
             {reviews.length === 0 && (
-              <p className="text-xs text-[#666666] text-center py-4">No reviews added yet. Add some below to show social proof.</p>
+              <p className="text-xs text-[#666666] text-center py-4">No reviews yet. Add some below.</p>
             )}
           </div>
           <div className="border-t border-[#2E2E2E] pt-4 space-y-3">
@@ -401,8 +456,8 @@ export default function AdminSettings() {
 
         {/* Policy */}
         <Section title="📄 Terms & Privacy">
-          <TextAreaSetting settingKey="terms_of_service" label="Terms of Service" />
-          <TextAreaSetting settingKey="privacy_policy" label="Privacy Policy" />
+          <TextAreaSetting settingKey="terms_of_service" label="Terms of Service" initialValue={settings['terms_of_service'] || ''} saving={saving} onSave={saveSetting} />
+          <TextAreaSetting settingKey="privacy_policy" label="Privacy Policy" initialValue={settings['privacy_policy'] || ''} saving={saving} onSave={saveSetting} />
         </Section>
 
         {/* Password Change */}
