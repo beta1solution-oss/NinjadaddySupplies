@@ -23,6 +23,18 @@ type Country = 'United States' | 'United Kingdom';
 type PayMethod = 'crypto' | 'geegpay' | 'payoneer' | 'bank' | 'giftcard';
 type DeliveryType = 'delivery' | 'pickup';
 
+// ── Defined OUTSIDE Checkout to prevent remount on every keystroke ──────────
+const checkoutInputCls = "w-full px-4 py-3 bg-[#F5F5F2] border border-[#E0E0DC] rounded-xl text-sm text-[#111111] placeholder-[#AAAAAA] focus:outline-none focus:border-[#E6C200] font-600 transition-colors";
+
+function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="bg-white border border-[#E0E0DC] rounded-2xl p-5 sm:p-6 space-y-4">
+      <h2 className="font-800 text-[#111111] text-base sm:text-lg">{title}</h2>
+      {children}
+    </div>
+  );
+}
+
 const GIFT_CARD_TYPES = [
   { id: 'amazon', name: 'Amazon', emoji: '📦' },
   { id: 'google_play', name: 'Google Play', emoji: '🎮' },
@@ -336,13 +348,8 @@ export default function Checkout() {
     }
   };
 
-  const InputClass = "w-full px-4 py-3 bg-[#F5F5F2] border border-[#E0E0DC] rounded-xl text-sm text-[#111111] placeholder-[#AAAAAA] focus:outline-none focus:border-[#E6C200] font-600 transition-colors";
-  const SectionCard = ({ title, children }: { title: string; children: React.ReactNode }) => (
-    <div className="bg-white border border-[#E0E0DC] rounded-2xl p-5 sm:p-6 space-y-4">
-      <h2 className="font-800 text-[#111111] text-base sm:text-lg">{title}</h2>
-      {children}
-    </div>
-  );
+  // Use the module-level checkoutInputCls constant (prevents focus loss bug)
+  const InputClass = checkoutInputCls;
 
   if (items.length === 0 && !completedOrderId) return (
     <div className="min-h-screen bg-[#F5F5F2]">

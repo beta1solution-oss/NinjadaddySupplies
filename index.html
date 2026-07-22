@@ -7,8 +7,7 @@
     <meta name="theme-color" content="#E6C200" />
     <meta name="description" content="Ninjadaddy Supplies — Direct sourcing, insane savings. Stealth shipping to US & UK." />
 
-    <!-- PWA -->
-    <link rel="manifest" href="/manifest.json" />
+    <!-- PWA: manifest injected only for admin routes via JS below -->
     <link rel="apple-touch-icon" href="/icon-192.png" />
 
     <!-- Open Graph -->
@@ -37,10 +36,19 @@
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js').catch(() => {});
-        });
+      // Only register PWA (manifest + service worker) on admin routes
+      if (window.location.pathname.startsWith('/admin')) {
+        // Inject manifest link for admin pages only
+        var link = document.createElement('link');
+        link.rel = 'manifest';
+        link.href = '/manifest.json';
+        document.head.appendChild(link);
+        // Register service worker
+        if ('serviceWorker' in navigator) {
+          window.addEventListener('load', function() {
+            navigator.serviceWorker.register('/sw.js').catch(function() {});
+          });
+        }
       }
     </script>
   </body>

@@ -102,7 +102,7 @@ export default function Navbar() {
           {/* Logo — always visible including mobile */}
           <Link to="/" className="flex items-center gap-2">
             <img
-              src="/src/assets/ninjadaddy-logo.png"
+            src="/icon-192.png"
               alt="Ninjadaddy Supplies"
               className="h-9 w-auto object-contain flex-shrink-0"
               onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}

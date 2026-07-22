@@ -67,17 +67,7 @@ function SidebarLogo() {
     <div className="p-4 border-b border-[#222222]">
       <div className="flex items-center gap-3">
         <div className="w-9 h-9 rounded-xl overflow-hidden bg-[#2A2A2A] flex items-center justify-center border border-[#333333] flex-shrink-0">
-          <img
-            src="/src/assets/ninjadaddy-logo.png"
-            alt="N"
-            className="w-full h-full object-cover"
-            onError={e => {
-              const el = e.target as HTMLImageElement;
-              el.style.display = 'none';
-              const parent = el.parentElement;
-              if (parent) parent.innerHTML = '<span style="color:#FFCC00;font-size:1.1rem;font-weight:900">N</span>';
-            }}
-          />
+          <span style={{ color: '#FFCC00', fontSize: '1.2rem', fontWeight: 900 }}>N</span>
         </div>
         <div>
           <p className="font-black text-sm text-[#FFCC00] tracking-tight leading-none">NINJADADDY</p>

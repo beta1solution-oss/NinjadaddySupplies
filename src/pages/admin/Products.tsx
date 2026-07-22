@@ -88,15 +88,26 @@ export default function AdminProducts() {
     const files = e.target.files;
     if (!files?.length) return;
     setUploadingImage(true);
+    let successCount = 0;
     for (const file of Array.from(files)) {
-      const ext = file.name.split('.').pop();
-      const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      const { error } = await supabase.storage.from('product-images').upload(path, file);
-      if (!error) {
-        const { data } = supabase.storage.from('product-images').getPublicUrl(path);
-        setImages(prev => [...prev, data.publicUrl]);
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+      const path = `products/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      console.log('Uploading image:', file.name, 'to path:', path, 'size:', file.size);
+      const { data: uploadData, error } = await supabase.storage
+        .from('product-images')
+        .upload(path, file, { cacheControl: '3600', upsert: false });
+      if (error) {
+        console.error('Upload error:', error);
+        toast.error(`Failed to upload ${file.name}: ${error.message}`);
+      } else {
+        console.log('Upload success:', uploadData);
+        const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(path);
+        console.log('Public URL:', urlData.publicUrl);
+        setImages(prev => [...prev, urlData.publicUrl]);
+        successCount++;
       }
     }
+    if (successCount > 0) toast.success(`${successCount} image${successCount > 1 ? 's' : ''} uploaded!`);
     setUploadingImage(false);
     if (fileRef.current) fileRef.current.value = '';
   };

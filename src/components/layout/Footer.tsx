@@ -111,7 +111,7 @@ export default function Footer() {
           <div className="sm:col-span-2 md:col-span-1">
             <div className="flex items-center gap-3 mb-5">
               <img
-                src="/src/assets/ninjadaddy-logo.png"
+              src="/icon-192.png"
                 alt="Ninjadaddy Supplies"
                 className="h-12 w-auto object-contain"
                 onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
