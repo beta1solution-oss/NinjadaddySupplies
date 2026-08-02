@@ -88,26 +88,61 @@ export default function AdminProducts() {
     const files = e.target.files;
     if (!files?.length) return;
     setUploadingImage(true);
+
+    // Explicitly get session token — required for storage auth in iframe environments
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      toast.error('Session expired — please log out and log back in.');
+      setUploadingImage(false);
+      return;
+    }
+
+    const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+    const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
     let successCount = 0;
+
     for (const file of Array.from(files)) {
       const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
-      const path = `products/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      console.log('Uploading image:', file.name, 'to path:', path, 'size:', file.size);
-      const { data: uploadData, error } = await supabase.storage
-        .from('product-images')
-        .upload(path, file, { cacheControl: '3600', upsert: false });
-      if (error) {
-        console.error('Upload error:', error);
-        toast.error(`Failed to upload ${file.name}: ${error.message}`);
-      } else {
-        console.log('Upload success:', uploadData);
-        const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(path);
-        console.log('Public URL:', urlData.publicUrl);
-        setImages(prev => [...prev, urlData.publicUrl]);
+      const filePath = `products/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+
+      console.log('[Upload] Starting:', file.name, file.size, 'bytes →', filePath);
+
+      try {
+        // Use direct fetch with explicit auth token (bypasses Supabase client session issues)
+        const res = await fetch(
+          `${SUPABASE_URL}/storage/v1/object/product-images/${filePath}`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${session.access_token}`,
+              'apikey': SUPABASE_ANON_KEY,
+              'Content-Type': file.type || 'image/jpeg',
+              'x-upsert': 'true',
+              'Cache-Control': '3600',
+            },
+            body: file,
+          }
+        );
+
+        if (!res.ok) {
+          const errText = await res.text();
+          console.error('[Upload] HTTP error:', res.status, errText);
+          toast.error(`${file.name}: ${res.status === 403 ? 'Permission denied — try logging out and back in' : (errText || res.statusText)}`);
+          continue;
+        }
+
+        const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/product-images/${filePath}`;
+        console.log('[Upload] Success! URL:', publicUrl);
+        setImages(prev => [...prev, publicUrl]);
         successCount++;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Network error';
+        console.error('[Upload] Fetch error:', err);
+        toast.error(`${file.name}: ${msg}`);
       }
     }
-    if (successCount > 0) toast.success(`${successCount} image${successCount > 1 ? 's' : ''} uploaded!`);
+
+    if (successCount > 0) toast.success(`${successCount} image${successCount > 1 ? 's' : ''} uploaded successfully!`);
     setUploadingImage(false);
     if (fileRef.current) fileRef.current.value = '';
   };
