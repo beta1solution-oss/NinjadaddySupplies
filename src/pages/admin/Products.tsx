@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Pencil, Trash2, Search, Upload, X, Package, ChevronDown, ChevronUp, Star, Truck, Tag } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, Upload, X, Package, ChevronDown, ChevronUp, Star, Truck, Tag, Link as LinkIcon } from 'lucide-react';
 import AdminLayout from '@/components/layout/AdminLayout';
 import { supabase } from '@/lib/supabase';
 import { formatPrice } from '@/lib/utils';
@@ -27,6 +27,48 @@ const emptyForm: ProductFormData = {
 
 const inputCls = "w-full px-3 py-2.5 bg-[#1A1A1A] border border-[#333333] rounded-xl text-sm text-[#F5F5F7] placeholder-[#666666] focus:outline-none focus:border-[#FFCC00]/50 transition-colors";
 
+// ─── Upload image via direct REST API call with explicit auth token ───────────
+async function uploadImageToStorage(file: File): Promise<string> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) {
+    throw new Error('Not authenticated — please log out and log back in.');
+  }
+
+  const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+  const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+  const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+  const filePath = `products/${Date.now()}-${Math.random().toString(36).slice(2, 9)}.${ext}`;
+
+  console.log(`[Upload] ${file.name} (${(file.size / 1024).toFixed(1)} KB) → ${filePath}`);
+
+  const res = await fetch(
+    `${SUPABASE_URL}/storage/v1/object/product-images/${filePath}`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'apikey': SUPABASE_ANON_KEY,
+        'Content-Type': file.type || 'image/jpeg',
+        'x-upsert': 'true',
+      },
+      body: file,
+    }
+  );
+
+  if (!res.ok) {
+    const errBody = await res.text();
+    console.error(`[Upload] Failed ${res.status}:`, errBody);
+    if (res.status === 401 || res.status === 403) {
+      throw new Error('Permission denied. Try logging out and back in, then retry.');
+    }
+    throw new Error(`Upload failed (${res.status}): ${errBody || res.statusText}`);
+  }
+
+  const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/product-images/${filePath}`;
+  console.log('[Upload] Success →', publicUrl);
+  return publicUrl;
+}
+
 export default function AdminProducts() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -37,12 +79,14 @@ export default function AdminProducts() {
   const [form, setForm] = useState<ProductFormData>(emptyForm);
   const [images, setImages] = useState<string[]>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [selectedCats, setSelectedCats] = useState<string[]>([]);
   const [tags, setTags] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [variants, setVariants] = useState<ProductVariant[]>([]);
   const [variantForm, setVariantForm] = useState({ color: '', size: '', price: '0', stock_quantity: '100' });
   const [saving, setSaving] = useState(false);
+  const [urlInput, setUrlInput] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
   const load = async () => {
@@ -65,7 +109,8 @@ export default function AdminProducts() {
 
   const openCreate = () => {
     setEditProduct(null); setForm(emptyForm); setImages([]);
-    setSelectedCats([]); setTags(''); setModalOpen(true);
+    setSelectedCats([]); setTags(''); setUploadError(null); setUrlInput('');
+    setModalOpen(true);
   };
 
   const openEdit = (p: Product) => {
@@ -81,70 +126,56 @@ export default function AdminProducts() {
     setImages(p.images || []);
     setSelectedCats((p as Product & { product_categories?: { category_id: string }[] }).product_categories?.map(c => c.category_id) || []);
     setTags((p.tags || []).join(', '));
+    setUploadError(null); setUrlInput('');
     setModalOpen(true);
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files?.length) return;
+
     setUploadingImage(true);
-
-    // Explicitly get session token — required for storage auth in iframe environments
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) {
-      toast.error('Session expired — please log out and log back in.');
-      setUploadingImage(false);
-      return;
-    }
-
-    const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
-    const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+    setUploadError(null);
     let successCount = 0;
 
     for (const file of Array.from(files)) {
-      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
-      const filePath = `products/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-
-      console.log('[Upload] Starting:', file.name, file.size, 'bytes →', filePath);
+      // Validate file type and size
+      if (!file.type.startsWith('image/')) {
+        toast.error(`${file.name}: Not an image file`);
+        continue;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error(`${file.name}: File too large (max 10MB)`);
+        continue;
+      }
 
       try {
-        // Use direct fetch with explicit auth token (bypasses Supabase client session issues)
-        const res = await fetch(
-          `${SUPABASE_URL}/storage/v1/object/product-images/${filePath}`,
-          {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${session.access_token}`,
-              'apikey': SUPABASE_ANON_KEY,
-              'Content-Type': file.type || 'image/jpeg',
-              'x-upsert': 'true',
-              'Cache-Control': '3600',
-            },
-            body: file,
-          }
-        );
-
-        if (!res.ok) {
-          const errText = await res.text();
-          console.error('[Upload] HTTP error:', res.status, errText);
-          toast.error(`${file.name}: ${res.status === 403 ? 'Permission denied — try logging out and back in' : (errText || res.statusText)}`);
-          continue;
-        }
-
-        const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/product-images/${filePath}`;
-        console.log('[Upload] Success! URL:', publicUrl);
-        setImages(prev => [...prev, publicUrl]);
+        const url = await uploadImageToStorage(file);
+        setImages(prev => [...prev, url]);
         successCount++;
       } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Network error';
-        console.error('[Upload] Fetch error:', err);
-        toast.error(`${file.name}: ${msg}`);
+        const msg = err instanceof Error ? err.message : 'Upload failed';
+        console.error('[Upload] Error:', err);
+        setUploadError(msg);
+        toast.error(msg);
       }
     }
 
-    if (successCount > 0) toast.success(`${successCount} image${successCount > 1 ? 's' : ''} uploaded successfully!`);
+    if (successCount > 0) {
+      toast.success(`${successCount} image${successCount > 1 ? 's' : ''} uploaded!`);
+    }
+
     setUploadingImage(false);
     if (fileRef.current) fileRef.current.value = '';
+  };
+
+  const addImageUrl = () => {
+    const url = urlInput.trim();
+    if (!url) return;
+    if (!url.startsWith('http')) { toast.error('Please enter a valid URL starting with http'); return; }
+    setImages(prev => [...prev, url]);
+    setUrlInput('');
+    toast.success('Image URL added!');
   };
 
   const removeImage = (url: string) => setImages(prev => prev.filter(i => i !== url));
@@ -168,19 +199,23 @@ export default function AdminProducts() {
 
     if (editProduct) {
       const { error } = await supabase.from('products').update(payload).eq('id', editProduct.id);
-      if (error) { toast.error('Failed to update'); setSaving(false); return; }
+      if (error) { toast.error('Failed to update: ' + error.message); setSaving(false); return; }
     } else {
       const { data, error } = await supabase.from('products').insert(payload).select().single();
-      if (error || !data) { toast.error('Failed to create'); setSaving(false); return; }
+      if (error || !data) { toast.error('Failed to create: ' + (error?.message || 'unknown error')); setSaving(false); return; }
       productId = data.id;
     }
 
     if (productId) {
       await supabase.from('product_categories').delete().eq('product_id', productId);
-      if (selectedCats.length) await supabase.from('product_categories').insert(selectedCats.map(cid => ({ product_id: productId, category_id: cid })));
+      if (selectedCats.length) {
+        await supabase.from('product_categories').insert(selectedCats.map(cid => ({ product_id: productId, category_id: cid })));
+      }
       await supabase.from('product_tags').delete().eq('product_id', productId);
       const tagArr = tags.split(',').map(t => t.trim()).filter(Boolean);
-      if (tagArr.length) await supabase.from('product_tags').insert(tagArr.map(tag => ({ product_id: productId, tag })));
+      if (tagArr.length) {
+        await supabase.from('product_tags').insert(tagArr.map(tag => ({ product_id: productId, tag })));
+      }
     }
 
     toast.success(editProduct ? 'Product updated!' : 'Product created!');
@@ -263,7 +298,7 @@ export default function AdminProducts() {
                     <tr key={p.id} className="hover:bg-[#2A2A2A] transition-colors">
                       <td className="px-3 py-3 w-12">
                         {p.images?.[0]
-                          ? <img src={p.images[0]} alt="" className="w-10 h-10 object-cover rounded-lg" />
+                          ? <img src={p.images[0]} alt="" className="w-10 h-10 object-cover rounded-lg" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                           : <div className="w-10 h-10 bg-[#2A2A2A] rounded-lg flex items-center justify-center">
                               <Package className="w-4 h-4 text-[#555555]" />
                             </div>
@@ -394,20 +429,20 @@ export default function AdminProducts() {
               {/* Pricing Strategy */}
               <div className="p-4 bg-[#1A1A1A] border border-[#333333] rounded-xl space-y-3">
                 <p className="text-xs font-bold text-[#FFCC00] flex items-center gap-1.5">
-                  <Tag className="w-3.5 h-3.5" /> Pricing Strategy (shows discount to customers)
+                  <Tag className="w-3.5 h-3.5" /> Pricing Strategy
                 </p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-xs text-[#888888] block mb-1 font-600">Cost Price ($) — internal</label>
+                    <label className="text-xs text-[#888888] block mb-1 font-600">Cost Price ($)</label>
                     <input type="number" step="0.01" value={form.cost_price} onChange={e => setForm(f => ({ ...f, cost_price: e.target.value }))}
                       placeholder="0.00" className={inputCls} />
-                    <p className="text-xs text-[#666666] mt-1">Shown as original/strikethrough price</p>
+                    <p className="text-xs text-[#666666] mt-1">Shown as original/strikethrough</p>
                   </div>
                   <div>
-                    <label className="text-xs text-[#888888] block mb-1 font-600">Selling Price ($) — customer sees</label>
+                    <label className="text-xs text-[#888888] block mb-1 font-600">Selling Price ($)</label>
                     <input type="number" step="0.01" value={form.selling_price} onChange={e => setForm(f => ({ ...f, selling_price: e.target.value }))}
                       placeholder="0.00" className={inputCls} />
-                    <p className="text-xs text-[#666666] mt-1">Displayed as the actual price</p>
+                    <p className="text-xs text-[#666666] mt-1">Displayed to customers</p>
                   </div>
                 </div>
                 {parseFloat(form.cost_price) > 0 && parseFloat(form.selling_price) > 0 && parseFloat(form.cost_price) > parseFloat(form.selling_price) && (
@@ -443,24 +478,62 @@ export default function AdminProducts() {
               {/* Images */}
               <div>
                 <label className="text-xs text-[#888888] block mb-2 font-600">Product Images</label>
-                <div className="flex flex-wrap gap-2 mb-2">
-                  {images.map((img, i) => (
-                    <div key={i} className="relative w-16 h-16">
-                      <img src={img} alt="" className="w-full h-full object-cover rounded-lg border border-[#333333]" />
-                      <button onClick={() => removeImage(img)}
-                        className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
-                        <X className="w-2.5 h-2.5 text-white" />
-                      </button>
-                    </div>
-                  ))}
-                  <button type="button" onClick={() => fileRef.current?.click()}
-                    className="w-16 h-16 border-2 border-dashed border-[#333333] rounded-lg flex items-center justify-center hover:border-[#FFCC00]/50 transition-colors">
-                    {uploadingImage
-                      ? <div className="w-4 h-4 border-2 border-[#FFCC00] border-t-transparent rounded-full animate-spin" />
-                      : <Upload className="w-5 h-5 text-[#888888]" />
-                    }
-                  </button>
+
+                {/* Existing images */}
+                {images.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {images.map((img, i) => (
+                      <div key={i} className="relative w-16 h-16 group">
+                        <img src={img} alt="" className="w-full h-full object-cover rounded-lg border border-[#333333]"
+                          onError={e => { (e.target as HTMLImageElement).style.opacity = '0.3'; }} />
+                        <button onClick={() => removeImage(img)}
+                          className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                          <X className="w-2.5 h-2.5 text-white" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Upload button */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <button type="button" onClick={() => fileRef.current?.click()}
+                      disabled={uploadingImage}
+                      className="flex items-center gap-2 px-4 py-2.5 border-2 border-dashed border-[#444444] rounded-xl text-sm text-[#888888] hover:border-[#FFCC00]/50 hover:text-[#FFCC00] transition-colors disabled:opacity-50">
+                      {uploadingImage
+                        ? <><div className="w-4 h-4 border-2 border-[#FFCC00] border-t-transparent rounded-full animate-spin" /> Uploading...</>
+                        : <><Upload className="w-4 h-4" /> Upload from device</>
+                      }
+                    </button>
+                    <span className="text-xs text-[#555555]">or</span>
+                  </div>
+
+                  {/* URL input */}
+                  <div className="flex gap-2">
+                    <input
+                      value={urlInput}
+                      onChange={e => setUrlInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addImageUrl(); } }}
+                      placeholder="Paste image URL (e.g. from CJ Dropshipping)"
+                      className={`${inputCls} flex-1 text-xs`}
+                    />
+                    <button type="button" onClick={addImageUrl}
+                      className="px-3 py-2 bg-[#2A2A2A] border border-[#444444] rounded-xl text-[#888888] hover:text-[#FFCC00] hover:border-[#FFCC00]/40 transition-colors flex-shrink-0">
+                      <LinkIcon className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <p className="text-xs text-[#555555]">Accepts JPG, PNG, WEBP. Max 10MB per file. You can add multiple.</p>
                 </div>
+
+                {/* Upload error display */}
+                {uploadError && (
+                  <div className="mt-2 p-3 bg-red-500/10 border border-red-500/30 rounded-xl">
+                    <p className="text-xs text-red-400 font-600">⚠️ Upload failed: {uploadError}</p>
+                    <p className="text-xs text-[#888888] mt-1">Try: Log out → log back in → retry. Or paste an image URL above instead.</p>
+                  </div>
+                )}
+
                 <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={handleImageUpload} />
               </div>
 
@@ -506,6 +579,7 @@ export default function AdminProducts() {
                 </div>
               </div>
             </div>
+
             <div className="flex gap-3 p-5 border-t border-[#333333]">
               <button onClick={() => setModalOpen(false)}
                 className="flex-1 py-2.5 bg-[#2A2A2A] border border-[#333333] rounded-xl text-sm font-600 text-[#888888] hover:border-[#FFCC00]/40 transition-colors">

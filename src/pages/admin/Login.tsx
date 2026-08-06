@@ -44,7 +44,7 @@ export default function AdminLogin() {
         <div className="text-center mb-8">
           <div className="w-20 h-20 mx-auto mb-4 flex items-center justify-center rounded-2xl overflow-hidden bg-black/40 border border-[#E6C200]/30 backdrop-blur-sm">
             <img
-              src="/src/assets/ninjadaddy-logo.png"
+              src="/icon-192.png"
               alt="Ninjadaddy"
               className="w-full h-full object-cover"
               onError={e => {
